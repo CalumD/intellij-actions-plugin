@@ -1,19 +1,35 @@
 <idea-plugin>
-    <id>com.github.calumd.intellijactionsplugin</id>
-    <name>intellij-actions-plugin</name>
-    <vendor>calumd</vendor>
+    <id>com.clumd.projects.intellijactionsplugin</id>
+    <name>Ide Streamdeck Integration</name>
+    <description>
+        <![CDATA[
+            <html>
+              <p>Adds support for the Elgato StreamDeck to call into IntelliJ
+              from anywhere on the running system and execute actions.</p>
+            </html>
+        ]]>
+    </description>
+    <vendor url="https://github.com/CalumD/intellij-actions-plugin">CalumD</vendor>
+
+    <version>0.0.1</version>
+
+    <change-notes>
+        <![CDATA[
+            <html>
+              <b>0.0.1</b> (2021-08-24)
+              <ul>
+                <li> Still in development, report any issues on the linked Github issues. </li>
+              </ul>
+            </html>
+        ]]>
+    </change-notes>
 
     <!-- Product and plugin compatibility requirements -->
     <!-- https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <depends>com.intellij.modules.platform</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <applicationService serviceImplementation="com.github.calumd.intellijactionsplugin.services.MyApplicationService"/>
-        <projectService serviceImplementation="com.github.calumd.intellijactionsplugin.services.MyProjectService"/>
+        <!-- Add your extensions here -->
+        <backgroundPostStartupActivity implementation="com.clumd.projects.intellijactionsplugin.StreamDeckInputServer" order="last"/>
     </extensions>
-
-    <applicationListeners>
-        <listener class="com.github.calumd.intellijactionsplugin.listeners.MyProjectManagerListener"
-                  topic="com.intellij.openapi.project.ProjectManagerListener"/>
-    </applicationListeners>
 </idea-plugin>
