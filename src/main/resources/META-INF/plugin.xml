@@ -12,6 +12,7 @@
     <vendor url="https://github.com/CalumD/intellij-actions-plugin">CalumD</vendor>
 
     <version>0.0.1</version>
+    <idea-version since-build="173.0"/>
 
     <change-notes>
         <![CDATA[
