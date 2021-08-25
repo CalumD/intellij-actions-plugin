@@ -2,6 +2,10 @@
 
 # intellij-actions-plugin Changelog
 
-## [Unreleased]
+## [0.0.2] - 2021-08-25
 ### Added
-- Initial scaffold created from [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template)
+- Working Debuggable dev environment.
+
+## [0.0.1] - 2021-08-24
+### Added
+- Still in development, report any issues on the linked Github issues. 
