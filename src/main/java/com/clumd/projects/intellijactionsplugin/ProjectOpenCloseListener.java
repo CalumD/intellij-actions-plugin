@@ -5,7 +5,11 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManagerListener;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.logging.Logger;
+
 public class ProjectOpenCloseListener implements ProjectManagerListener {
+
+    private final Logger log = Logger.getLogger(ProjectOpenCloseListener.class.getName());
 
     private Thread integrationServer;
 
@@ -15,12 +19,19 @@ public class ProjectOpenCloseListener implements ProjectManagerListener {
         if (ApplicationManager.getApplication().isUnitTestMode()) {
             return;
         }
+
+        log.fine("Detected a new project opening, creating a new handler service.");
+
         // Get the service
         StreamDeckInputServer streamDeckInputServer = ApplicationManager.getApplication().getService(StreamDeckInputServer.class);
 
+        // Create a new instance of the service when we open a new project.
         if (integrationServer == null) {
+            log.fine("Running newly created integration server.");
             integrationServer = new Thread(() -> streamDeckInputServer.run(project));
             integrationServer.start();
+        } else {
+            log.warning("Integration service already exists, skipping.");
         }
     }
 
@@ -32,10 +43,10 @@ public class ProjectOpenCloseListener implements ProjectManagerListener {
         }
         // Stop the service
         if (integrationServer != null) {
+            log.fine("Trying to terminate StreamDeck integration service.");
             StreamDeckInputServer streamDeckInputServer = ApplicationManager.getApplication().getService(StreamDeckInputServer.class);
             streamDeckInputServer.stop();
             integrationServer = null;
         }
-
     }
 }
