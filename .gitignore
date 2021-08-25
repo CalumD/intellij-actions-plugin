@@ -1,3 +1,4 @@
 .gradle
 .idea
 build
+/intellij-actions-plugin.iml
