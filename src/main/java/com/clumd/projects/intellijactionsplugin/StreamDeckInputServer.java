@@ -1,19 +1,24 @@
 package com.clumd.projects.intellijactionsplugin;
 
+import com.intellij.openapi.components.Service;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.startup.StartupActivity;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
 
-public class StreamDeckInputServer implements StartupActivity {
+@Service(value = Service.Level.PROJECT)
+public final class StreamDeckInputServer {
 
     private static final int[] PORT_RANGE = new int[]{48160, 48159, 48158, 48157, 48156, 48155, 48154, 48153, 48152, 48151, 48150};
-    private Project project;
+    private static final int SOCKET_ACCEPT_TIMEOUT_IN_SECONDS = 5;
+    private boolean running = true;
+    private Thread clientHandlingThread;
 
-    private static ServerSocket getFreePortFromList() throws IOException {
+    private ServerSocket getFreePortFromList() throws IOException {
 
         // Try each port in our allowed PORT RANGE until one is found to be available.
         // This is only useful if you have multiple instances of IntelliJ open since each ide instance will need its own ServerSocket.
@@ -29,21 +34,34 @@ public class StreamDeckInputServer implements StartupActivity {
         throw new IOException("No ports in range were available.");
     }
 
-    @SuppressWarnings({"InfiniteLoopStatement", "squid:S2189"})
-    @Override
-    public void runActivity(@NotNull Project project) {
-        this.project = project;
-
+    @SuppressWarnings({"squid:S2189", "squid:S106"})
+    public void run(@NotNull Project project) {
         try (
                 ServerSocket server = getFreePortFromList();
         ) {
             System.out.println("StreamDeck Integration Server listening on port: " + server.getLocalPort());
+            server.setSoTimeout(SOCKET_ACCEPT_TIMEOUT_IN_SECONDS * 1000);
 
             while (true) {
-                new StreamDeckConnection(server.accept(), project).run();
+                try {
+                    Socket client = server.accept();
+
+                    clientHandlingThread = new Thread(new StreamDeckConnection(client, project));
+                    clientHandlingThread.start();
+                    clientHandlingThread.join();
+                } catch (SocketTimeoutException e) {
+                    if (!running) {
+                        break;
+                    }
+                }
             }
         } catch (Exception ex) {
             System.err.println(ex.getMessage());
         }
+    }
+
+    public void stop() {
+        running = false;
+        clientHandlingThread.interrupt();
     }
 }
