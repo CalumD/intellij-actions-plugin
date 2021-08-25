@@ -3,18 +3,22 @@ package com.clumd.projects.intellijactionsplugin;
 import com.intellij.ide.DataManager;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionPlaces;
+import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.IdeActions;
-import com.intellij.openapi.actionSystem.Presentation;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
+import org.jetbrains.annotations.NotNull;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.Socket;
-import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
-class StreamDeckConnection implements Runnable {
+final class StreamDeckConnection implements Runnable {
 
     private final Socket streamDeckClientSocket;
     private final Project project;
@@ -39,112 +43,101 @@ class StreamDeckConnection implements Runnable {
         }
     }
 
-
     private void handleRequest(ObjectInputStream inputStream, ObjectOutputStream outputStream) throws IOException, ExecutionException, TimeoutException {
         ActionManager actionManager = ActionManager.getInstance();
         int previousTimeout;
 
-        AnActionEvent actionEvent = new AnActionEvent(
-                null,
-                Objects.requireNonNull(DataManager.getInstance().getDataContextFromFocusAsync().blockingGet(2000)),
-                ActionPlaces.UNKNOWN,
-                new Presentation(),
-                ActionManager.getInstance(),
-                0,
-                false,
-                false
-        );
-
         int command = inputStream.readInt();
         System.out.println("Got command: " + command);
+
+        AnAction actionToPerform = null;
+
         switch (command) {
-            case 0:
-                // plugin Control: SHUTDOWN
-                isRunning = false;
-                break;
             case 1:
+                // plugin Control: PING
+                writeData(outputStream, 1);
+                break;
+            case 2:
                 // plugin Control: CUSTOM IDE ACTION
                 previousTimeout = streamDeckClientSocket.getSoTimeout();
                 streamDeckClientSocket.setSoTimeout(2000);
                 String commandName = inputStream.readUTF();
                 streamDeckClientSocket.setSoTimeout(previousTimeout);
-                actionManager.getAction(commandName).actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction(commandName);
+                break;
+            case 9:
+                // plugin Control: KILL
+                isRunning = false;
                 break;
 
             case 100:
                 // Run action: BUILD
-                actionManager.getAction(IdeActions.ACTION_COMPILE_PROJECT).actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction(IdeActions.ACTION_COMPILE_PROJECT);
                 break;
             case 101:
                 // Run action: RUN
-                actionManager.getAction(IdeActions.ACTION_DEFAULT_RUNNER).actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction(IdeActions.ACTION_DEFAULT_RUNNER);
                 break;
             case 102:
                 // Run action: DEBUG
-                actionManager.getAction(IdeActions.ACTION_DEFAULT_DEBUGGER).actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction(IdeActions.ACTION_DEFAULT_DEBUGGER);
                 break;
             case 103:
                 // Run action: RUN WITH COVERAGE
-                actionManager.getAction("Coverage").actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction("Coverage");
                 break;
             case 104:
                 // Run action: STOP
-                actionManager.getAction(IdeActions.ACTION_STOP_PROGRAM).actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction(IdeActions.ACTION_STOP_PROGRAM);
                 break;
 
             case 201:
                 // Run action: GIT UPDATE
-                actionManager.getAction("Vcs.UpdateProject").actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction("Vcs.UpdateProject");
                 break;
             case 202:
                 // Run action: GIT COMMIT
-                actionManager.getAction("CheckinProject").actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction("CheckinProject");
                 break;
             case 203:
                 // Run action: GIT PUSH
-                actionManager.getAction("Vcs.Push").actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction("Vcs.Push");
                 break;
 
             case 301:
                 // Run action: CURSOR BACK
-                actionManager.getAction(IdeActions.ACTION_GOTO_BACK).actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction(IdeActions.ACTION_GOTO_BACK);
                 break;
             case 302:
                 // Run action: CURSOR FORWARD
-                actionManager.getAction(IdeActions.ACTION_GOTO_FORWARD).actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction(IdeActions.ACTION_GOTO_FORWARD);
                 break;
             case 303:
                 // Run action: ADD ADDITIONAL CARET
-                actionManager.getAction("EditorAddOrRemoveAdditionalCaret").actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction("EditorAddOrRemoveAdditionalCaret");
                 break;
             case 304:
                 // Run action: REFACTOR
-                actionManager.getAction("Refactorings.QuickListPopupAction").actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction("Refactorings.QuickListPopupAction");
                 break;
 
 
             case 401:
                 // Run action: INTELLIJ SETTINGS
-                actionManager.getAction(IdeActions.ACTION_SHOW_SETTINGS).actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction(IdeActions.ACTION_SHOW_SETTINGS);
                 break;
             case 402:
                 // Run action: PROJECT STRUCTURE
-                actionManager.getAction("ShowProjectStructureSettings").actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction("ShowProjectStructureSettings");
                 break;
             case 403:
                 // Run action: FORMAT CODE
-                actionManager.getAction(IdeActions.ACTION_EDITOR_REFORMAT).actionPerformed(actionEvent);
+                actionToPerform = actionManager.getAction(IdeActions.ACTION_EDITOR_REFORMAT);
                 break;
 
             case 501:
                 // Get Data: PROJECT NAME
-                previousTimeout = streamDeckClientSocket.getSoTimeout();
-                streamDeckClientSocket.setSoTimeout(2000);
-                try {
-                    outputStream.writeChars(project.getName());
-                } finally {
-                    streamDeckClientSocket.setSoTimeout(previousTimeout);
-                }
+                writeData(outputStream, project.getName());
                 break;
 
 
@@ -155,6 +148,37 @@ class StreamDeckConnection implements Runnable {
 
             default:
                 System.err.println("Unknown request ID provided to plugin, doing nothing.");
+        }
+
+        if (actionToPerform != null) {
+            DataContext dataContext = DataManager.getInstance().getDataContextFromFocusAsync().blockingGet(100000);
+
+            final AnAction finalActionToPerform = actionToPerform;
+            ApplicationManager.getApplication().invokeLater(() ->
+                    finalActionToPerform.actionPerformed(
+                            AnActionEvent.createFromDataContext(
+                                    ActionPlaces.KEYBOARD_SHORTCUT,
+                                    null,
+                                    dataContext == null ? DataContext.EMPTY_CONTEXT : dataContext
+                            )
+                    ));
+        }
+    }
+
+    private void writeData(@NotNull final ObjectOutputStream outputStream, Object data) throws IOException {
+        int previousTimeout = streamDeckClientSocket.getSoTimeout();
+        streamDeckClientSocket.setSoTimeout(2000);
+        try {
+            if (data instanceof String) {
+                outputStream.writeUTF((String)data);
+            } else if (data instanceof Integer) {
+                outputStream.writeInt((int) data);
+            } else {
+                outputStream.writeObject(data);
+            }
+            outputStream.flush();
+        } finally {
+            streamDeckClientSocket.setSoTimeout(previousTimeout);
         }
     }
 }
