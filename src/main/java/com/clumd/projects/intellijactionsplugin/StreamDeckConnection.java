@@ -47,11 +47,13 @@ final class StreamDeckConnection implements Runnable {
         }
     }
 
+    @SuppressWarnings("squid:S5411")
     private void handleRequest(ObjectInputStream inputStream, ObjectOutputStream outputStream) throws IOException, ExecutionException, TimeoutException {
 
         int previousTimeout;
         int command = inputStream.readInt();
         log.info("Received command ID : " + command);
+        Boolean success = null;
 
         switch (command) {
             case 0: // plugin Control: NOTHING - RESERVED AS AN 'SUCCESS' Code
@@ -64,60 +66,60 @@ final class StreamDeckConnection implements Runnable {
                 streamDeckClientSocket.setSoTimeout(2000);
                 String commandName = inputStream.readUTF();
                 streamDeckClientSocket.setSoTimeout(previousTimeout);
-                runAction(commandName);
+                success = runAction(commandName);
                 break;
             case 9: // plugin Control: KILL
                 isRunning = false;
                 break;
 
             case 100: // Run action: BUILD
-                runAction(IdeActions.ACTION_COMPILE_PROJECT);
+                success = runAction(IdeActions.ACTION_COMPILE_PROJECT);
                 break;
             case 101: // Run action: RUN
-                runAction(IdeActions.ACTION_DEFAULT_RUNNER);
+                success = runAction(IdeActions.ACTION_DEFAULT_RUNNER);
                 break;
             case 102: // Run action: DEBUG
-                runAction(IdeActions.ACTION_DEFAULT_DEBUGGER);
+                success = runAction(IdeActions.ACTION_DEFAULT_DEBUGGER);
                 break;
             case 103: // Run action: RUN WITH COVERAGE
-                runAction("Coverage");
+                success = runAction("Coverage");
                 break;
             case 104: // Run action: STOP
-                runAction(IdeActions.ACTION_STOP_PROGRAM);
+                success = runAction(IdeActions.ACTION_STOP_PROGRAM);
                 break;
 
             case 201: // Run action: GIT UPDATE
-                runAction("Vcs.UpdateProject");
+                success = runAction("Vcs.UpdateProject");
                 break;
             case 202: // Run action: GIT COMMIT
-                runAction("CheckinProject");
+                success = runAction("CheckinProject");
                 break;
             case 203: // Run action: GIT PUSH
-                runAction("Vcs.Push");
+                success = runAction("Vcs.Push");
                 break;
 
             case 301: // Run action: CURSOR BACK
-                runAction(IdeActions.ACTION_GOTO_BACK);
+                success = runAction(IdeActions.ACTION_GOTO_BACK);
                 break;
             case 302: // Run action: CURSOR FORWARD
-                runAction(IdeActions.ACTION_GOTO_FORWARD);
+                success = runAction(IdeActions.ACTION_GOTO_FORWARD);
                 break;
             case 303: // Run action: ADD ADDITIONAL CARET
-                runAction("EditorAddOrRemoveAdditionalCaret");
+                success = runAction("EditorAddOrRemoveAdditionalCaret");
                 break;
             case 304: // Run action: REFACTOR
-                runAction("Refactorings.QuickListPopupAction");
+                success = runAction("Refactorings.QuickListPopupAction");
                 break;
 
 
             case 401: // Run action: INTELLIJ SETTINGS
-                runAction(IdeActions.ACTION_SHOW_SETTINGS);
+                success = runAction(IdeActions.ACTION_SHOW_SETTINGS);
                 break;
             case 402: // Run action: PROJECT STRUCTURE
-                runAction("ShowProjectStructureSettings");
+                success = runAction("ShowProjectStructureSettings");
                 break;
             case 403: // Run action: FORMAT CODE
-                runAction(IdeActions.ACTION_EDITOR_REFORMAT);
+                success = runAction(IdeActions.ACTION_EDITOR_REFORMAT);
                 break;
 
             case 501: // Get Data: PROJECT NAME
@@ -128,9 +130,12 @@ final class StreamDeckConnection implements Runnable {
                 log.warning("Unknown request ID provided to plugin, doing nothing.");
         }
 
+        if (success != null) {
+            writeData(outputStream, success ? 0 : -1);
+        }
     }
 
-    private void runAction(String actionID) throws ExecutionException, TimeoutException {
+    private boolean runAction(String actionID) throws ExecutionException, TimeoutException {
         final AnAction actionToPerform = actionManager.getAction(actionID);
 
         if (actionToPerform != null) {
@@ -144,7 +149,10 @@ final class StreamDeckConnection implements Runnable {
                                     dataContext == null ? DataContext.EMPTY_CONTEXT : dataContext
                             )
                     ));
+            return true;
         }
+
+        return false;
     }
 
     private void writeData(@NotNull final ObjectOutputStream outputStream, Object data) throws IOException {
