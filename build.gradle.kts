@@ -40,10 +40,10 @@ changelog {
 }
 
 tasks {
-    // Set the compatibility versions to 1.8
+    // Set the compatibility versions to 13
     withType<JavaCompile> {
-        sourceCompatibility = "1.8"
-        targetCompatibility = "1.8"
+        sourceCompatibility = "13"
+        targetCompatibility = "13"
     }
 
     patchPluginXml {
